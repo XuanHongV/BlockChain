@@ -15,3 +15,4 @@ export default async function connectDB() {
     process.exit(1);
   }
 }
+export const PORT = process.env.PORT || 8000;

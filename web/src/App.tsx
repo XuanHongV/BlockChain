@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Header } from './components/Layout/Header';
+import Login from "./components/Auth/Login";
 import { Sidebar } from './components/Layout/Sidebar';
 import { Dashboard } from './components/Dashboard/Dashboard';
 import { ProductTracking } from './components/Products/ProductTracking';
@@ -7,8 +8,19 @@ import { SupplierManagement } from './components/Suppliers/SupplierManagement';
 import { BlockchainLog } from './components/Transactions/BlockchainLog';
 
 function App() {
+  const [isAuthed, setIsAuthed] = useState<boolean>(!!localStorage.getItem("token"));
   const [activeTab, setActiveTab] = useState('dashboard');
-
+  
+  if (!isAuthed) {
+    return (
+      <Login
+        onSuccess={() => {
+          setIsAuthed(true);
+          setActiveTab("dashboard");
+        }}
+      />
+    );
+  }
   const renderActiveComponent = () => {
     switch (activeTab) {
       case 'dashboard':
