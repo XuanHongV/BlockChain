@@ -1,28 +1,118 @@
-import { Request, Response } from 'express';
+import { Request, Response } from "express";
+import Shipment from "../models/Shipment";
 
 export const getShipments = async (req: Request, res: Response) => {
   try {
-    const hardCodedShipments = [
-      {
-        _id: '60c72b965f1b2c001c8e4d51',
-        productName: 'Vắc xin Covid-19',
-        status: 'In Transit',
-      },
-      {
-        _id: '60c72b965f1b2c001c8e4d52',
-        productName: 'Thuốc kháng sinh',
-        status: 'Delivered',
-      },
-      {
-        _id: '60c72b965f1b2c001c8e4d53',
-        productName: 'Thiết bị y tế',
-        status: 'Pending',
-      },
-    ];
+    const {
+      status,
+      q,
+      producerAddress,
+      from,
+      to,
+      page = "1",
+      limit = "20",
+      sort = "-createdAt",
+    } = req.query as Record<string, string>;
 
-    res.status(200).send(JSON.stringify(hardCodedShipments, null, 2));
+    const filter: any = {};
+    if (status) filter.status = status;
+    if (q) filter.productName = { $regex: q, $options: "i" };
+    if (producerAddress)
+      filter.producerAddress = String(producerAddress).toLowerCase();
 
-  } catch (error) {
-    res.status(500).json({ message: 'Server Lỗi', error });
+    if (from || to) {
+      filter.manufacturingDate = {};
+      if (from) filter.manufacturingDate.$gte = new Date(from);
+      if (to) {
+        const end = new Date(to);
+        end.setHours(23, 59, 59, 999);
+        filter.manufacturingDate.$lte = end;
+      }
+    }
+
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [data, total] = await Promise.all([
+      Shipment.find(filter).sort(sort).skip(skip).limit(limitNum).lean(),
+      Shipment.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      data,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum),
+      },
+      filter,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
+export const createShipment = async (req: Request, res: Response) => {
+  try {
+    const {
+      shipmentId,
+      productName,
+      quantity,
+      manufacturingDate,
+      status,           
+      transactionHash,  
+      producerAddress,
+    } = req.body;
+
+    // Validate bắt buộc
+    if (!shipmentId || !productName || quantity == null || !manufacturingDate || !producerAddress) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        required: ["shipmentId", "productName", "quantity", "manufacturingDate", "producerAddress"],
+      });
+    }
+
+    //Chuẩn hoá và kiểm tra dữ liệu
+    const parsedQty = Number(quantity);
+    const parsedDate = new Date(manufacturingDate);
+    if (Number.isNaN(parsedQty) || parsedQty < 0) {
+      return res.status(400).json({ message: "quantity must be a non-negative number" });
+    }
+    if (Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({ message: "manufacturingDate must be a valid ISO date string" });
+    }
+
+    //Kiểm tra trùng khoá trước khi tạo
+    const existedById = await Shipment.findOne({ shipmentId }).lean();
+    if (existedById) {
+      return res.status(409).json({ message: "Duplicate shipmentId" });
+    }
+    if (transactionHash) {
+      const existedByTx = await Shipment.findOne({ transactionHash }).lean();
+      if (existedByTx) {
+        return res.status(409).json({ message: "Duplicate transactionHash" });
+      }
+    }
+
+    //Tạo document
+    const doc = await Shipment.create({
+      shipmentId,
+      productName: String(productName).trim(),
+      quantity: parsedQty,
+      manufacturingDate: parsedDate,
+      status,
+      transactionHash: transactionHash ? String(transactionHash).trim() : undefined,
+      producerAddress: String(producerAddress).toLowerCase().trim(),
+    });
+
+    return res.status(201).json(doc);
+  } catch (error: any) {
+    if (error?.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || "unique_field";
+      return res.status(409).json({ message: `Duplicate ${field}` });
+    }
+    return res.status(500).json({ message: error.message || "Server error" });
   }
 };
