@@ -1,0 +1,15 @@
+[
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_productName",
+                "type": "string"
+            }
+        ],
+        "name": "createShipment",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    }
+]

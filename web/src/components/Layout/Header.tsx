@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ethers } from "ethers";
 import { Bell, Search, User, Shield, LogOut } from 'lucide-react';
 
 interface HeaderProps {
@@ -7,9 +8,53 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentUser, onLogout }) => {
+  // 1. STATE: Quản lý địa chỉ ví và lỗi
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Hàm rút gọn địa chỉ ví (ví dụ: 0x1234...abcd)
+   */
+  const formatAddress = (address: string) => {
+    if (!address) return "Invalid Address";
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+  };
+
+  /**
+   * 2. LOGIC: Hàm xử lý kết nối ví MetaMask
+   */
+  const handleConnectWallet = async () => {
+    setError(null); // Xóa lỗi cũ khi thử kết nối lại
+    
+    // Kiểm tra xem trình duyệt có cài đặt ví (MetaMask) không
+    if (typeof window.ethereum !== 'undefined') {
+      try {
+        // Tạo một Provider từ đối tượng ethereum của ví
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        
+        // Yêu cầu người dùng cấp quyền truy cập tài khoản
+        const accounts: string[] = await provider.send("eth_requestAccounts", []);
+        
+        // Cập nhật state với địa chỉ ví đầu tiên
+        if (accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+        }
+      } catch (err) {
+        // Xử lý khi người dùng từ chối hoặc có lỗi khác
+        console.error("Lỗi khi kết nối ví:", err);
+        setError("Kết nối thất bại. Vui lòng kiểm tra ví (MetaMask).");
+        setWalletAddress(null);
+      }
+    } else {
+      // Nếu không tìm thấy MetaMask
+      setError("Vui lòng cài đặt MetaMask hoặc ví Web3 tương thích.");
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
+
         {/* Logo and Title */}
         <div className="flex items-center space-x-3">
           <div className="bg-gradient-to-r from-blue-600 to-teal-600 p-2 rounded-lg">
@@ -33,8 +78,26 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLogout }) => {
           </div>
         </div>
 
-        {/* User Actions */}
+        {/* User Actions & Connect Wallet Button */}
         <div className="flex items-center space-x-4">
+          
+          {/* 3. NÚT CONNECT WALLET MỚI */}
+          {walletAddress ? (
+            // Trạng thái: Đã kết nối
+            <div className="text-sm font-medium text-green-700 bg-green-100 px-4 py-2 rounded-lg cursor-default">
+              {formatAddress(walletAddress)}
+            </div>
+          ) : (
+            // Trạng thái: Chưa kết nối
+            <button 
+              onClick={handleConnectWallet}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              Connect Wallet
+            </button>
+          )}
+
+          {/* Nút chuông thông báo */}
           <button className="relative p-2 text-gray-400 hover:text-gray-600 transition-colors">
             <Bell className="h-5 w-5" />
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -42,6 +105,7 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLogout }) => {
             </span>
           </button>
           
+          {/* Thông tin người dùng */}
           <div className="flex items-center space-x-3 pl-4 border-l border-gray-200">
             <div className="text-right">
               <p className="text-sm font-medium text-gray-900">{currentUser}</p>
@@ -75,6 +139,12 @@ export const Header: React.FC<HeaderProps> = ({ currentUser, onLogout }) => {
           </div>
         </div>
       </div>
+
+      {error && (
+        <div className="text-center text-red-500 text-sm mt-2">
+          {error}
+        </div>
+      )}
     </header>
   );
 };

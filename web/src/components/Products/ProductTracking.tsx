@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CreateShipmentForm } from './CreateShipmentForm';
 import { Search, Filter, MapPin, Clock, Thermometer, Shield, Package, Eye } from 'lucide-react';
 import { Product } from '../../types';
 
@@ -78,6 +79,13 @@ export const ProductTracking: React.FC = () => {
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Product Tracking</h2>
         <p className="text-gray-600">Monitor products throughout the supply chain with blockchain verification</p>
       </div>
+{/* ====================================================== */}
+      {/* 2. HIỂN THỊ FORM TẠO LÔ HÀNG */}
+      {/* ====================================================== */}
+      <div className="mb-6"> {/* Thêm khoảng cách dưới form */}
+        <CreateShipmentForm /> 
+      </div>
+      {/* ====================================================== */}
 
       {/* Search and Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
