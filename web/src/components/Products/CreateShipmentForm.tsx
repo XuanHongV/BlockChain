@@ -1,96 +1,221 @@
 import React, { useState } from 'react';
-import { ethers } from 'ethers'; 
+import { ethers } from 'ethers';
 import { callCreateShipment } from '../../services/blockchainService';
 import { IntegrationDev } from '../../services/integrationService';
+import { ShipmentList, Shipment } from './ShipmentList';
+
+// ===== Spinner nho nhỏ =====
+const Spinner = () => (
+  <div
+    className="inline-block animate-spin h-4 w-4 border-[2px] border-current border-t-transparent text-blue-600 rounded-full"
+    role="status"
+    aria-label="loading"
+  >
+    <span className="sr-only">Loading...</span>
+  </div>
+);
+
+// ===== Các bước hiển thị tiến trình =====
+type Step = 'init' | 'connecting' | 'signing' | 'mining' | 'backend' | 'done';
+const stepMessages: Record<Step, string> = {
+  init: '',
+  connecting: 'Đang kết nối MetaMask...',
+  signing: 'Vui lòng ký giao dịch trên MetaMask...',
+  mining: 'Đang chờ xác nhận giao dịch trên blockchain...',
+  backend: 'Đang gửi dữ liệu lên hệ thống...',
+  done: 'Hoàn tất!'
+};
+
+// ===== Helpers: nhận diện lỗi tạm thời & retry có kiểm soát =====
+
+// Lỗi tạm thời nên retry: circuit breaker / 429 / 503 / timeout / network
+const isTransientRpcError = (err: any) => {
+  const msg = (err?.message || err?.reason || err?.shortMessage || '').toLowerCase();
+  const code = err?.code || err?.status || err?.response?.status;
+
+  const brokenCircuit =
+    err?.data?.cause?.isBrokenCircuitError === true ||
+    msg.includes('circuit breaker is open') ||
+    msg.includes('breaker is open');
+
+  const rateLimited = code === 429 || msg.includes('rate limit') || msg.includes('too many requests');
+  const overloaded = code === 503 || msg.includes('overloaded') || msg.includes('service unavailable');
+  const timeout = msg.includes('timeout') || msg.includes('timed out');
+
+  const network =
+    err?.code === 'NETWORK_ERROR' ||
+    msg.includes('network error') ||
+    msg.includes('fetch failed');
+
+  return brokenCircuit || rateLimited || overloaded || timeout || network;
+};
+
+// Map lỗi RPC → thông điệp rõ ràng
+const mapRpcErrorToMessage = (err: any): string => {
+  const msg = (err?.message || err?.reason || err?.shortMessage || '').toLowerCase();
+  const code = err?.code || err?.status || err?.response?.status;
+
+  // 1) User từ chối ký
+  if (code === 'ACTION_REJECTED' || msg.includes('user rejected')) {
+    return 'Bạn đã từ chối giao dịch trên MetaMask';
+  }
+
+  // 2) Sai chain / chain mismatch
+  if (msg.includes('chain') && msg.includes('mismatch')) {
+    return 'Ví đang kết nối sai mạng. Vui lòng chuyển sang đúng network rồi thử lại';
+  }
+
+  // 3) Không đủ tiền gas
+  if (code === 'INSUFFICIENT_FUNDS' || msg.includes('insufficient funds')) {
+    return 'Không đủ số dư để trả phí gas';
+  }
+
+  // 4) Contract reject / invalid input
+  if (code === 'CALL_EXCEPTION' || code === 'UNPREDICTABLE_GAS_LIMIT' || msg.includes('execution reverted')) {
+    return 'Giao dịch bị từ chối bởi Smart Contract (vui lòng kiểm tra dữ liệu đầu vào)';
+  }
+
+  // 5) Circuit breaker / rate limit / overloaded / timeout
+  if (isTransientRpcError(err)) {
+    return 'Mạng blockchain hoặc RPC đang quá tải/tắc nghẽn, vui lòng thử lại sau ít phút';
+  }
+
+  // 6) Network lỗi chung
+  if (code === 'NETWORK_ERROR' || msg.includes('network error')) {
+    return 'Mất kết nối mạng. Vui lòng kiểm tra Internet';
+  }
+
+  // 7) Fallback chung
+  return 'Có lỗi không xác định xảy ra';
+};
+
+// Retry wrapper (exponential backoff)
+const withRetry = async <T,>(
+  fn: () => Promise<T>,
+  options: { retries?: number; baseDelayMs?: number } = {}
+): Promise<T> => {
+  const retries = options.retries ?? 3;
+  const base = options.baseDelayMs ?? 800;
+
+  let lastErr: any;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt === retries || !isTransientRpcError(err)) {
+        break;
+      }
+      const delay = base * Math.pow(2, attempt); // 0.8s, 1.6s, 3.2s
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+};
 
 export const CreateShipmentForm: React.FC = () => {
-
   const [productName, setProductName] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [timestamp, setTimestamp] = useState<string>('');
-  
-  const [statusMessage, setStatusMessage] = useState<string>('');
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [currentStep, setCurrentStep] = useState<Step>('init');
+  const [error, setError] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const [recentShipments, setRecentShipments] = useState<Shipment[]>([]);
+
+  const handleRetry = () => {
+    setError('');
+    setCurrentStep('init');
+    setIsLoading(false);
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    
     if (!productName || !quantity || !timestamp) {
-      setStatusMessage("Lỗi: Vui lòng nhập đầy đủ thông tin (Tên, Số lượng, Thời gian).");
+      setError('Vui lòng nhập đầy đủ thông tin (Tên, Số lượng, Thời gian)');
       return;
     }
 
-    
     const quantityNum = parseInt(quantity, 10);
     const manufacturingDateISO = new Date(timestamp).toISOString();
-    const manufactureTimestampUnix = Math.floor(new Date(timestamp).getTime() / 1000); 
+    const manufactureTimestampUnix = Math.floor(new Date(timestamp).getTime() / 1000);
 
     if (isNaN(quantityNum) || quantityNum <= 0 || isNaN(manufactureTimestampUnix)) {
-      setStatusMessage("Lỗi: Số lượng hoặc Thời gian không hợp lệ.");
+      setError('Số lượng hoặc Thời gian không hợp lệ');
       return;
     }
 
     setIsLoading(true);
-    setStatusMessage('Đang mở ví MetaMask. Vui lòng xác nhận giao dịch...');
+    setError('');
+    setCurrentStep('connecting');
 
-    let producerAddress = ''; 
+    let producerAddress = '';
 
     try {
-      
-      if (typeof window.ethereum !== 'undefined') {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        producerAddress = await signer.getAddress(); 
-      } else {
-        throw new Error("MetaMask chưa được cài đặt!");
+      // 0) Kết nối ví & kiểm tra network (tùy chọn)
+      if (typeof (window as any).ethereum === 'undefined') {
+        throw new Error('MetaMask chưa được cài đặt!');
       }
-      
-      // 1. GỌI CONTRACT
-      const tx = await callCreateShipment({
+
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+
+      // (Optional) kiểm tra chainId đúng mạng
+      // const { chainId } = await provider.getNetwork();
+      // if (Number(chainId) !== 11155111) { // ví dụ Sepolia
+      //   throw new Error('CHAIN_MISMATCH');
+      // }
+
+      producerAddress = await signer.getAddress();
+      setCurrentStep('signing');
+
+      // 1) Gọi contract + mining với retry cho lỗi tạm thời
+      setCurrentStep('mining');
+      const tx = await withRetry(
+        async () => {
+          return await callCreateShipment({
+            productName: productName,
+            quantity: quantityNum,
+            manufactureTimestamp: manufactureTimestampUnix
+          });
+        },
+        { retries: 3, baseDelayMs: 800 }
+      );
+
+      const receipt: any = await withRetry(() => tx.wait(), { retries: 3, baseDelayMs: 800 });
+      const hash = receipt?.hash || receipt?.transactionHash;
+      setTxHash(hash || '');
+
+      // 2) Gọi backend (không retry quá tích cực để tránh nhân bản ghi)
+      setCurrentStep('backend');
+      await IntegrationDev.sendToBackend({
         productName: productName,
         quantity: quantityNum,
-        manufactureTimestamp: manufactureTimestampUnix
+        manufacturingDate: manufacturingDateISO,
+        transactionHash: hash,
+        producerAddress: producerAddress
       });
 
-      setStatusMessage('Đang gửi giao dịch, vui lòng chờ xác nhận (mined)...');
+      // 3) Hoàn tất
+      setCurrentStep('done');
 
-      // 2. CHỜ ĐÀO VÀ LẤY HASH
-      const receipt = await tx.wait(); 
-      const txHash = receipt.hash;
+      // Cập nhật danh sách lô hàng vừa tạo (giới hạn 5)
+      setRecentShipments((prev) => [
+        { productName, quantity, timestamp, txHash: hash },
+        ...prev
+      ].slice(0, 5));
 
-      // 3. GỌI BACKEND
-      setStatusMessage(`Giao dịch thành công! Đang gửi Hash ${txHash} tới backend...`);
-      await IntegrationDev.sendToBackend({
-          productName: productName,
-          quantity: quantityNum,
-          manufacturingDate: manufacturingDateISO,
-          transactionHash: txHash,
-          producerAddress: producerAddress
-      });
-
-      // 4. HOÀN TẤT
-      setStatusMessage(`Thành công! Lô hàng "${productName}" đã tạo và gửi lên backend. Tx: ${txHash}`);
-      setProductName(''); 
+      // Reset form
+      setProductName('');
       setQuantity('');
       setTimestamp('');
-
-    } catch (error: any) {
-      console.error("Chi tiết lỗi:", error);
-      let friendlyMessage = "Lỗi: Có lỗi không xác định xảy ra.";
-
-      if (error.code === 'ACTION_REJECTED') { 
-        friendlyMessage = "Lỗi: Bạn đã từ chối giao dịch trên MetaMask.";
-      } else if (error.code === 'INSUFFICIENT_FUNDS') {
-        friendlyMessage = "Lỗi: Không đủ tiền (ví dụ: tBNB) trong ví để trả phí gas.";
-      } else if (error.code === 'NETWORK_ERROR') {
-        friendlyMessage = "Lỗi: Mất kết nối mạng. Vui lòng kiểm tra Internet.";
-      } else if (error.code === 'CALL_EXCEPTION' || error.code === 'UNPREDICTABLE_GAS_LIMIT') {
-        friendlyMessage = "Lỗi: Giao dịch bị từ chối bởi Smart Contract (kiểm tra dữ liệu đầu vào).";
-      } else if (error.message && error.message.includes("MetaMask chưa được cài đặt")) {
-        friendlyMessage = "Lỗi: Vui lòng cài đặt MetaMask!";
-      }
-      setStatusMessage(friendlyMessage);
+    } catch (err: any) {
+      console.error('Chi tiết lỗi:', err);
+      const errorMsg = mapRpcErrorToMessage(err);
+      setError(errorMsg);
+      setCurrentStep('init');
     } finally {
       setIsLoading(false);
     }
@@ -101,13 +226,14 @@ export const CreateShipmentForm: React.FC = () => {
       <h2 className="text-xl font-semibold mb-4 text-gray-800">Tạo Lô Hàng Mới</h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        
         <div>
           <label htmlFor="productName" className="block text-sm font-medium text-gray-700 mb-1">
             Tên Sản Phẩm
           </label>
           <input
-            type="text" id="productName" value={productName}
+            type="text"
+            id="productName"
+            value={productName}
             onChange={(e) => setProductName(e.target.value)}
             placeholder="Ví dụ: Vắc-xin Lô A123"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -120,7 +246,9 @@ export const CreateShipmentForm: React.FC = () => {
             Số Lượng
           </label>
           <input
-            type="number" id="quantity" value={quantity}
+            type="number"
+            id="quantity"
+            value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
             placeholder="Ví dụ: 1000"
             min="1"
@@ -129,39 +257,86 @@ export const CreateShipmentForm: React.FC = () => {
           />
         </div>
 
-
         <div>
           <label htmlFor="timestamp" className="block text-sm font-medium text-gray-700 mb-1">
             Thời Gian Sản Xuất
           </label>
           <input
-            type="datetime-local" id="timestamp" value={timestamp}
+            type="datetime-local"
+            id="timestamp"
+            value={timestamp}
             onChange={(e) => setTimestamp(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             disabled={isLoading}
           />
         </div>
-        
-        
+
         <button
           type="submit"
-          className={`w-full px-4 py-2 text-white font-medium rounded-lg transition-colors
-            ${isLoading 
-              ? 'bg-gray-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+          className={`w-full px-4 py-2 text-white font-medium rounded-lg transition-colors ${
+            isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+          }`}
           disabled={isLoading}
         >
           {isLoading ? 'Đang xử lý...' : 'Tạo Lô Hàng'}
         </button>
       </form>
 
+      {/* Progress & Status */}
+      <div className="mt-4 space-y-2">
+        {/* Progress Steps */}
+        {isLoading && currentStep !== 'init' && (
+          <div className="flex items-center space-x-2 text-sm text-gray-600">
+            <Spinner />
+            <span>{stepMessages[currentStep]}</span>
+          </div>
+        )}
 
-      {statusMessage && (
-        <p className={`mt-4 text-sm ${statusMessage.startsWith('Lỗi:') ? 'text-red-600' : 'text-green-600'}`}>
-          {statusMessage}
-        </p>
-      )}
+        {/* Success Message */}
+        {currentStep === 'done' && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-700">
+              ✅ Thành công! Lô hàng đã được tạo.
+              {txHash && (
+                <>
+                  <span className="block mt-1 text-xs">
+                    Transaction: <code className="bg-green-100 px-1">{txHash}</code>
+                  </span>
+                  <a
+                    href={`https://sepolia.etherscan.io/tx/${txHash}`} // Đổi explorer theo network bạn dùng
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block mt-1 text-xs text-blue-600 hover:underline"
+                  >
+                    Xem giao dịch trên explorer
+                  </a>
+                </>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex flex-col space-y-2">
+              <p className="text-sm text-red-600 flex items-center">
+                <span className="text-red-500 mr-2">⚠️</span>
+                {error}
+              </p>
+              <button
+                onClick={handleRetry}
+                className="self-end px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+              >
+                ↺ Thử lại
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Recent Shipments List */}
+        <ShipmentList shipments={recentShipments} title="Các Lô Hàng Vừa Tạo" />
+      </div>
     </div>
   );
 };

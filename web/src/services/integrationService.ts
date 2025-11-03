@@ -1,8 +1,7 @@
 import axios from 'axios';
 
 // API endpoint
-const API_URL = 'http://localhost:8000/api/shipments';
-
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 interface BackendShipmentData {
 
@@ -34,7 +33,7 @@ const sendToBackend = async (data: BackendShipmentData) => {
     console.log("IntegrationDev: Request Body:", requestBody);
 
     const response = await axios.post(
-      API_URL,
+      API_BASE_URL,
       requestBody,
       {
         headers: {
