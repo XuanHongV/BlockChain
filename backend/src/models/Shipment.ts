@@ -5,7 +5,7 @@ export interface IShipment extends Document {
     productName: string;
     quantity: number;
     manufacturingDate: Date;
-    status: 'CREATED' | 'SHIPPED' | 'RECEIVED' | 'AUDITED' | 'FOR_SALE';
+    status: 'CREATED' | 'SHIPPED' |'IN_TRANSIT' | 'RECEIVED' | 'AUDITED' | 'FOR_SALE ';
     transactionHash: string;
     producerAddress: string;
     createdAt: Date; 
@@ -37,9 +37,8 @@ const ShipmentSchema: Schema = new Schema(
         },
         status: {
             type: String,
-            required: true,
-            enum: ['CREATED', 'SHIPPED', 'RECEIVED', 'AUDITED', 'FOR_SALE'],
-            default: 'CREATED',
+            enum: ["CREATED", "SHIPPED", "IN_TRANSIT", "RECEIVED", "AUDITED", "FOR_SALE"],
+            default: "CREATED",
         },
         transactionHash: {
             type: String,

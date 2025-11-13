@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
-import Shipment from "../models/Shipment";
+import Shipment, { IShipment } from "../models/Shipment";
+import mongoose from "mongoose";
 
 export const getShipments = async (req: Request, res: Response) => {
   try {
@@ -116,3 +117,83 @@ export const createShipment = async (req: Request, res: Response) => {
     return res.status(500).json({ message: error.message || "Server error" });
   }
 };
+
+// Lấy chi tiết 1 shipment theo shipmentId hoặc _id (MongoDB)
+export const getShipmentById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    let shipment = null;
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      shipment = await Shipment.findById(id).lean();
+    } else {
+      // tìm theo shipmentId
+      shipment = await Shipment.findOne({ shipmentId: id }).lean();
+    }
+
+    if (!shipment) {
+      return res.status(404).json({ message: "Shipment not found" });
+    }
+
+    return res.status(200).json(shipment);
+
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
+// Cập nhật trạng thái lô hàng + transactionHash
+export const updateShipmentStatus = async (req: Request, res: Response) => {
+  try {
+    const {
+      shipmentId,
+      newStatus,
+      transactionHash,
+    }: {
+      shipmentId?: string;
+      newStatus?: IShipment["status"];
+      transactionHash?: string;
+    } = req.body;
+
+    // 1. Validate input
+    if (!shipmentId || !newStatus || !transactionHash) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        required: ["shipmentId", "newStatus", "transactionHash"],
+      });
+    }
+
+    // 2. Tìm shipment theo shipmentId
+    const shipment = await Shipment.findOne({ shipmentId }).exec();
+    if (!shipment) {
+      return res.status(404).json({ message: "Shipment not found" });
+    }
+
+    // 3. Kiểm tra trùng transactionHash với lô hàng khác
+    const existedByTx = await Shipment.findOne({
+      transactionHash: transactionHash.trim(),
+      _id: { $ne: shipment._id },
+    }).lean();
+
+    if (existedByTx) {
+      return res.status(409).json({ message: "Duplicate transactionHash" });
+    }
+
+    // 4. Cập nhật status + transactionHash
+    shipment.status = newStatus;
+    shipment.transactionHash = transactionHash.trim();
+
+    await shipment.save();
+
+    // 5. Trả về kết quả
+    return res.status(200).json({
+      message: "Shipment status updated successfully",
+      data: shipment,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
+
