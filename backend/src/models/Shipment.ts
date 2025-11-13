@@ -1,17 +1,56 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type ShipmentStatus = 'CREATED' | 'SHIPPED' | 'RECEIVED' | 'AUDITED' | 'FOR_SALE';
+
+// entry lịch sử trạng thái
+export interface IStatusHistoryEntry {
+  status: ShipmentStatus;
+  transactionHash?: string;
+  changedAt: Date;
+}
+
 export interface IShipment extends Document {
     shipmentId: string;
     productName: string;
     quantity: number;
     manufacturingDate: Date;
-    status: 'CREATED' | 'SHIPPED' |'IN_TRANSIT' | 'RECEIVED' | 'AUDITED' | 'FOR_SALE ';
+    status: ShipmentStatus;
     transactionHash: string;
     producerAddress: string;
     createdAt: Date; 
     updatedAt: Date; 
+    statusHistory?: IStatusHistoryEntry[];
 }
 
+const statusEnum: ShipmentStatus[] = [
+  'CREATED',
+  'SHIPPED',
+  'RECEIVED',
+  'AUDITED',
+  'FOR_SALE',
+];
+
+// Schema con bản ghi lịch sử
+const StatusHistorySchema = new Schema<IStatusHistoryEntry>(
+  {
+    status: {
+      type: String,
+      enum: statusEnum,
+      required: true,
+    },
+    transactionHash: {
+      type: String,
+      trim: true,
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  }
+);
 const ShipmentSchema: Schema = new Schema(
     {
         shipmentId: {
@@ -37,7 +76,7 @@ const ShipmentSchema: Schema = new Schema(
         },
         status: {
             type: String,
-            enum: ["CREATED", "SHIPPED", "IN_TRANSIT", "RECEIVED", "AUDITED", "FOR_SALE"],
+            enum: ["CREATED", "SHIPPED", "RECEIVED", "AUDITED", "FOR_SALE"],
             default: "CREATED",
         },
         transactionHash: {
@@ -50,6 +89,10 @@ const ShipmentSchema: Schema = new Schema(
             type: String,
             required: [true, 'Vui lòng cung cấp địa chỉ ví của nhà sản xuất'],
             trim: true,
+        },
+        statusHistory: {
+        type: [StatusHistorySchema],
+        default: [],
         },
     },
     {

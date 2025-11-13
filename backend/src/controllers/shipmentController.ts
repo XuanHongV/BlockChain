@@ -196,4 +196,68 @@ export const updateShipmentStatus = async (req: Request, res: Response) => {
   }
 };
 
+// Cập nhật trạng thái lô hàng theo _id (PUT)
+// Nếu trạng thái thay đổi và có transactionHash mới -> lưu hash mới
+export const updateShipmentById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Kiểm tra format _id
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid shipment id format" });
+    }
+
+    // Lấy dữ liệu từ body
+    const {
+      status: newStatus,
+      transactionHash,
+    }: {
+      status?: IShipment["status"];
+      transactionHash?: string;
+    } = req.body;
+
+    // Validate cơ bản
+    if (!newStatus) {
+      return res.status(400).json({
+        message: "Missing required field: status",
+      });
+    }
+
+    // Tìm shipment theo _id
+    const shipment = await Shipment.findById(id).exec();
+    if (!shipment) {
+      return res.status(404).json({ message: "Shipment not found" });
+    }
+
+    // Nếu có transactionHash mới và khác với hash cũ -> check trùng & cập nhật
+    if (transactionHash && transactionHash.trim() !== shipment.transactionHash) {
+      const newTx = transactionHash.trim();
+
+      // Kiểm tra trùng hash với lô hàng khác
+      const existedByTx = await Shipment.findOne({
+        transactionHash: newTx,
+        _id: { $ne: shipment._id },
+      }).lean();
+
+      if (existedByTx) {
+        return res.status(409).json({ message: "Duplicate transactionHash" });
+      }
+
+      shipment.transactionHash = newTx;
+    }
+
+    // Cập nhật status (luôn cập nhật vì đây là PUT)
+    shipment.status = newStatus as IShipment["status"];
+
+    await shipment.save();
+
+    return res.status(200).json({
+      message: "Shipment updated successfully",
+      data: shipment,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ message: error.message || "Server error" });
+  }
+};
+
 

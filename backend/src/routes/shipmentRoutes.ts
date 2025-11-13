@@ -1,13 +1,15 @@
 import express from "express";
-import { getShipments, createShipment, getShipmentById, updateShipmentStatus, } from "../controllers/shipmentController";
+import { getShipments, createShipment, getShipmentById,
+     updateShipmentStatus, updateShipmentById,  } from "../controllers/shipmentController";
 
 
 const router = express.Router();
 
 router.get("/", getShipments);
-router.post("/", createShipment);  
-router.get('/:id', getShipmentById);
+router.post("/", createShipment);  // lay ds shipment 
+router.get('/:id', getShipmentById); // lay chi tiet 1 shipment theo id 
 router.patch("/status", updateShipmentStatus); 
+router.put("/:id", updateShipmentById); 
 
 
 export default router;
