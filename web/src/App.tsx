@@ -24,7 +24,7 @@ function App() {
     }
   })();
   const [user, setUser] = useState<any>(savedUser);
-  
+
   if (!isAuthed) {
     if (isPublicTracking) {
       return (
@@ -120,7 +120,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
+        <div className="flex h-screen bg-gray-100">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header currentUser={user?.email || 'Người dùng'} onLogout={handleLogout} />

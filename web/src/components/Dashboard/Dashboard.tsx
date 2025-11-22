@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import api from '../../services/apiService';
 import { Package, Users, Activity, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
 import { MetricCard } from './MetricCard';
-import { Shipment } from '../../types'; 
+import { ShipmentList } from '../Products/ShipmentList';
+import { Shipment } from '../../types';
 
 export const Dashboard: React.FC = () => {
   const [shipments, setShipments] = useState<Shipment[]>([]);
@@ -84,51 +85,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* === Shipment Table (thay cho mock data) === */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Danh sách lô hàng</h3>
-        {shipments.length === 0 ? (
-          <div className="text-gray-500">Chưa có lô hàng.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-gray-700">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left py-3 px-4">id</th>
-                  <th className="text-left py-3 px-4">Tên sản phẩm</th>
-                  <th className="text-left py-3 px-4">Trạng thái</th>
-                  <th className="text-left py-3 px-4">Cập nhật</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {shipments.map((s) => (
-                  <tr key={s.shipmentId || s.transactionHash}>
-                    <td className="py-3 px-4 font-medium">{s.shipmentId || s.transactionHash}</td>
-                    <td className="py-3 px-4 font-medium">{s.productName}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          s.status === 'CREATED'
-                            ? 'bg-green-100 text-green-800'
-                            : s.status === 'SHIPPED'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : s.status === 'FOR_SALE'
-                            ? 'bg-red-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {new Date(s.updatedAt).toLocaleString('vi-VN')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <ShipmentList title="Danh sách lô hàng" shipments={shipments} />
 
       {/* Charts and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -184,7 +141,7 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-gray-400 mt-1">2 giờ trước</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-3 p-3 bg-red-50 rounded-lg">
               <div className="w-2 h-2 bg-red-500 rounded-full mt-2"></div>
               <div className="flex-1">
@@ -193,7 +150,7 @@ export const Dashboard: React.FC = () => {
                 <p className="text-xs text-gray-400 mt-1">4 giờ trước</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
               <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
               <div className="flex-1">
@@ -234,11 +191,10 @@ export const Dashboard: React.FC = () => {
                   <td className="py-3 px-4 text-sm text-gray-900">{tx.type}</td>
                   <td className="py-3 px-4 text-sm font-medium text-blue-600">{tx.productId}</td>
                   <td className="py-3 px-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                      tx.status === 'Đã xác nhận' 
-                        ? 'bg-green-100 text-green-800' 
+                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${tx.status === 'Đã xác nhận'
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                      }`}>
                       {tx.status}
                     </span>
                   </td>

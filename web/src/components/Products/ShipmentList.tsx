@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Shipment } from '../../types';
 import { ShipmentStatusUpdater } from './ShipmentStatusUpdater';
+import ShipmentDetailModal from './ShipmentDetailModal';
 
 export type ShipmentListProps = {
   title?: string;
@@ -9,8 +10,10 @@ export type ShipmentListProps = {
 };
 
 export const ShipmentList: React.FC<ShipmentListProps> = ({ title, shipments, onRefresh }) => {
+  const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null);
+  const [open, setOpen] = useState(false);
 
-  const formatVN = (d: string | number | Date) => {
+  const formatVN = (d: string | number | Date | undefined) => {
     if (!d) return '-';
     return new Date(d).toLocaleString('vi-VN');
   };
@@ -33,6 +36,11 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({ title, shipments, on
     );
   };
 
+  const handleClick = (shipment: Shipment) => {
+    setSelectedShipment(shipment);
+    setOpen(true);
+  };
+
   return (
     <div className="mt-6">
       {title && <h3 className="text-lg font-semibold text-gray-800 mb-3">{title}</h3>}
@@ -53,34 +61,53 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({ title, shipments, on
                 <th className="py-3 px-4 border-b text-center">Cập nhật</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-gray-200 bg-white">
               {shipments.map((s) => (
-                <tr key={s.shipmentId || s.transactionHash} className="hover:bg-gray-50 transition-colors">
-                  <td className="py-3 px-4 font-mono text-xs">
+                <tr
+                  key={s.shipmentId || s.transactionHash}
+                  className="hover:bg-gray-50 transition-colors"
+                >
+                  <td
+                    className="py-3 px-4 font-mono text-xs cursor-pointer"
+                    onClick={() => handleClick(s)}
+                    title={s.transactionHash || s.shipmentId}
+                  >
                     {/* Ưu tiên hiển thị ShipmentID, nếu không có thì hiện Hash cắt ngắn */}
                     {s.shipmentId ? (
                       <span className="font-bold text-blue-600">{s.shipmentId}</span>
                     ) : (
-                      <span title={s.transactionHash}>
-                        {s.transactionHash?.substring(0, 10)}...
+                      <span>
+                        {s.transactionHash ? `${s.transactionHash.substring(0, 10)}...` : '-'}
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-4 font-medium">{s.productName}</td>
+
+                  <td
+                    className="py-3 px-4 font-medium cursor-pointer"
+                    onClick={() => handleClick(s)}
+                  >
+                    {s.productName || '-'}
+                  </td>
+
                   <td className="py-3 px-4">
                     {renderStatusBadge(s.status)}
                   </td>
-                  <td className="py-3 px-4 text-gray-500">
+
+                  <td
+                    className="py-3 px-4 text-gray-500 cursor-pointer"
+                    onClick={() => handleClick(s)}
+                  >
                     {formatVN(s.updatedAt || s.createdAt)}
                   </td>
 
                   {/* --- TÍCH HỢP NÚT CẬP NHẬT --- */}
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 text-center">
                     <ShipmentStatusUpdater
                       shipmentId={s.shipmentId || s.transactionHash}
                       currentStatus={s.status}
                       onStatusUpdated={() => {
-                        console.log("Status updated! Refreshing list...");
+                        // gọi onRefresh nếu parent truyền để reload data
                         if (onRefresh) onRefresh();
                       }}
                     />
@@ -89,6 +116,13 @@ export const ShipmentList: React.FC<ShipmentListProps> = ({ title, shipments, on
               ))}
             </tbody>
           </table>
+
+          {/* Modal hiển thị chi tiết lô hàng */}
+          <ShipmentDetailModal
+            open={open}
+            shipment={selectedShipment}
+            onClose={() => setOpen(false)}
+          />
         </div>
       )}
     </div>

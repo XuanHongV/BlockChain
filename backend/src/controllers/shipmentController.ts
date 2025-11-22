@@ -62,8 +62,8 @@ export const createShipment = async (req: Request, res: Response) => {
       productName,
       quantity,
       manufacturingDate,
-      status,           
-      transactionHash,  
+      status,
+      transactionHash,
       producerAddress,
     } = req.body;
 
@@ -120,27 +120,47 @@ export const createShipment = async (req: Request, res: Response) => {
 
 // Lấy chi tiết 1 shipment theo shipmentId hoặc _id (MongoDB)
 export const getShipmentById = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
+  const id = req.params.id;
 
-    let shipment = null;
+  const shipment = await Shipment.findOne({ shipmentId: id });
 
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      shipment = await Shipment.findById(id).lean();
-    } else {
-      // tìm theo shipmentId
-      shipment = await Shipment.findOne({ shipmentId: id }).lean();
+  if (!shipment) {
+    // Nếu trình duyệt
+    if (req.headers.accept && req.headers.accept.includes('text/html')) {
+      return res.status(404).send(`<h1>❌ Không tìm thấy lô hàng: ${id}</h1>`);
     }
 
-    if (!shipment) {
-      return res.status(404).json({ message: "Shipment not found" });
-    }
-
-    return res.status(200).json(shipment);
-
-  } catch (error: any) {
-    return res.status(500).json({ message: error.message || "Server error" });
+    // Nếu API
+    return res.status(404).json({ error: 'Shipment not found' });
   }
+
+  // Nếu browser mở route → trả HTML
+  if (req.headers.accept && req.headers.accept.includes('text/html')) {
+    return res.send(`
+      <html>
+      <head>
+        <meta charset="UTF-8" />
+        <title>Thông tin lô hàng</title>
+        <style>
+          body { font-family: sans-serif; padding: 20px; }
+          .box { border: 1px solid #ccc; padding: 16px; border-radius: 10px; }
+        </style>
+      </head>
+      <body>
+        <h1>Lô hàng ${shipment.shipmentId}</h1>
+        <div class="box">
+          <p><b>Tên SP:</b> ${shipment.productName}</p>
+          <p><b>Số lượng:</b> ${shipment.quantity}</p>
+          <p><b>Trạng thái:</b> ${shipment.status}</p>
+          <p><b>Ngày SX:</b> ${new Date(shipment.manufacturingDate).toLocaleString('vi-VN')}</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  // Nếu là REST client / Axios → trả JSON
+  return res.json(shipment);
 };
 
 // Cập nhật trạng thái lô hàng + transactionHash

@@ -25,6 +25,32 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const updateBackendStatus = async (shipmentId: string | number, statusName: string, txHash: string) => {
+    try {
+      const response = await fetch(`/api/shipments/${shipmentId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: statusName,
+          transactionHash: txHash
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.message || 'Lỗi khi cập nhật trạng thái backend.');
+      }
+
+      return await response.json();
+    } catch (err: any) {
+      console.error('Backend update error:', err);
+      throw err;
+    }
+  };
+
+
   const handleUpdate = async (newStatusEnum: number, statusName: string) => {
     setIsOpen(false);
     if (!confirm(`Bạn có chắc muốn đổi trạng thái thành "${statusName}"?`)) return;
@@ -38,6 +64,8 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
       console.log("Hash nhận được:", tx.hash);
 
       await tx.wait();
+
+      await updateBackendStatus(shipmentId, statusName, tx.hash);
 
       await IntegrationDev.updateStatus({
         shipmentId: shipmentId,
@@ -129,7 +157,7 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
         <div className="absolute right-0 mt-2 w-64 bg-red-50 text-red-600 text-xs p-2 rounded border border-red-200 z-40 flex items-start gap-1">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{error}</span>
-          <button onClick={() => setError('')} className="ml-auto"><X className="w-3 h-3"/></button>
+          <button onClick={() => setError('')} className="ml-auto"><X className="w-3 h-3" /></button>
         </div>
       )}
     </div>
