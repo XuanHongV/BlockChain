@@ -10,6 +10,23 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const fetchShipments = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/shipments');
+      let data: Shipment[] = [];
+      if (Array.isArray(response.data)) data = response.data;
+      else if (Array.isArray(response.data?.shipments)) data = response.data.shipments;
+      else data = response.data?.data || [];
+      setShipments(data || []);
+      setError('');
+    } catch (err: any) {
+      setError('Không tải được dữ liệu lô hàng');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { fetchShipments(); }, []);
   // 🧭 Gọi API lấy dữ liệu khi component mount
   useEffect(() => {
     (async () => {
@@ -85,7 +102,11 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* === Shipment Table (thay cho mock data) === */}
-      <ShipmentList title="Danh sách lô hàng" shipments={shipments} />
+      <ShipmentList
+        title={`Danh sách lô hàng`}
+        shipments={shipments}
+        onRefresh={fetchShipments}
+      />
 
       {/* Charts and Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -192,8 +213,8 @@ export const Dashboard: React.FC = () => {
                   <td className="py-3 px-4 text-sm font-medium text-blue-600">{tx.productId}</td>
                   <td className="py-3 px-4">
                     <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${tx.status === 'Đã xác nhận'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-yellow-100 text-yellow-800'
                       }`}>
                       {tx.status}
                     </span>

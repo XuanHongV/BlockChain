@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { callUpdateStatus, ShipmentStatus } from '../../services/blockchainService';
 import { RefreshCw, AlertCircle, Truck, PackageCheck, ShieldCheck, Tag, Edit, X, Check, Copy } from 'lucide-react';
+import axios from "axios";
 
 interface Props {
   shipmentId: string | number;
@@ -10,12 +11,13 @@ interface Props {
 
 export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStatus, onStatusUpdated }) => {
   const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<'idle' | 'broadcast' | 'confirming' | 'sendingBackend'>('idle');
   const [error, setError] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
   // State lưu hash
-  const [successHash, setSuccessHash] = useState(''); 
+  const [successHash, setSuccessHash] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -39,6 +41,7 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
     if (!confirm(`Bạn có chắc muốn đổi trạng thái thành "${statusName}"?`)) return;
 
     setLoading(true);
+    setPhase('broadcast');
     setError('');
     setSuccessHash('');
 
@@ -46,28 +49,41 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
       // 1. Gọi Blockchain
       const tx = await callUpdateStatus(shipmentId, newStatusEnum);
       console.log("Hash nhận được:", tx.hash);
+      setPhase('confirming');
 
-      // 2. Đợi Blockchain xác nhận
       await tx.wait();
-      
+      setPhase('sendingBackend');
       setSuccessHash(tx.hash);
 
+      await axios.patch(`${import.meta.env.VITE_API_URL}/shipments/status`, {
+        shipmentId,
+        newStatus: statusName,
+        transactionHash: tx.hash
+      });
+      setPhase('idle');
       // 3. Cập nhật UI (Load lại danh sách)
       if (onStatusUpdated) onStatusUpdated();
 
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Có lỗi xảy ra.");
+      setError(err.response?.data?.message || err.message || "Có lỗi xảy ra.");
+      setPhase('idle');
     } finally {
       setLoading(false);
     }
   };
 
   if (loading) {
+    const label =
+      phase === 'broadcast' ? 'Gửi giao dịch...' :
+        phase === 'confirming' ? 'Đang chờ xác nhận trên blockchain...' :
+          phase === 'sendingBackend' ? 'Ghi trạng thái lên server...' :
+            'Đang xử lý...';
+
     return (
       <div className="flex items-center text-blue-600 text-xs animate-pulse">
         <RefreshCw className="animate-spin h-3 w-3 mr-1" />
-        Đang ghi Blockchain...
+        {label}
       </div>
     );
   }
@@ -77,22 +93,22 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
       <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg animate-in fade-in zoom-in duration-300 shadow-sm">
         <div className="flex justify-between items-start mb-2">
           <span className="text-xs font-bold text-green-700 flex items-center gap-1">
-            <Check className="w-3 h-3"/> Thành công!
+            <Check className="w-3 h-3" /> Thành công!
           </span>
-          <button onClick={() => setSuccessHash('')}><X className="w-3 h-3 text-gray-400 hover:text-gray-600"/></button>
+          <button onClick={() => setSuccessHash('')}><X className="w-3 h-3 text-gray-400 hover:text-gray-600" /></button>
         </div>
-        
+
         <p className="text-xs text-gray-600 mb-2">Hash giao dịch:</p>
         <div className="flex items-center gap-2 bg-white p-1.5 rounded border border-gray-300 mb-1">
           <code className="text-[10px] text-gray-800 font-mono truncate flex-1" title={successHash}>
             {successHash}
           </code>
-          <button 
+          <button
             onClick={handleCopy}
             className="p-1 hover:bg-gray-100 rounded text-blue-600 transition-colors"
             title="Copy Hash"
           >
-            {copied ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>}
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
           </button>
         </div>
         <p className="text-[10px] text-gray-500 mt-1 text-center italic">Transaction hash</p>
@@ -125,7 +141,7 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
             >
               <Truck className={`w-4 h-4 ${currentStatus === 'SHIPPED' ? 'text-gray-400' : 'text-yellow-600'}`} />
               <span>Giao hàng (Ship)</span>
-              {currentStatus === 'SHIPPED' && <Check className="w-3 h-3 ml-auto"/>}
+              {currentStatus === 'SHIPPED' && <Check className="w-3 h-3 ml-auto" />}
             </button>
 
             <button
@@ -137,7 +153,7 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
             >
               <PackageCheck className={`w-4 h-4 ${currentStatus === 'RECEIVED' ? 'text-gray-400' : 'text-purple-600'}`} />
               <span>Đã nhận (Receive)</span>
-              {currentStatus === 'RECEIVED' && <Check className="w-3 h-3 ml-auto"/>}
+              {currentStatus === 'RECEIVED' && <Check className="w-3 h-3 ml-auto" />}
             </button>
 
             <button
@@ -149,7 +165,7 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
             >
               <ShieldCheck className={`w-4 h-4 ${currentStatus === 'AUDITED' ? 'text-gray-400' : 'text-indigo-600'}`} />
               <span>Kiểm định (Audit)</span>
-              {currentStatus === 'AUDITED' && <Check className="w-3 h-3 ml-auto"/>}
+              {currentStatus === 'AUDITED' && <Check className="w-3 h-3 ml-auto" />}
             </button>
 
             <div className="border-t border-gray-100 my-1"></div>
@@ -163,18 +179,18 @@ export const ShipmentStatusUpdater: React.FC<Props> = ({ shipmentId, currentStat
             >
               <Tag className={`w-4 h-4 ${currentStatus === 'FOR_SALE' ? 'text-gray-400' : 'text-green-600'}`} />
               <span>Bán hàng (Sell)</span>
-              {currentStatus === 'FOR_SALE' && <Check className="w-3 h-3 ml-auto"/>}
+              {currentStatus === 'FOR_SALE' && <Check className="w-3 h-3 ml-auto" />}
             </button>
           </div>
         </div>
       )}
-      
+
       {error && (
         <div className="absolute right-0 mt-2 w-64 bg-red-50 text-red-600 text-xs p-3 rounded-lg border border-red-200 shadow-lg z-50 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span className="flex-1">{error}</span>
-            <button onClick={() => setError('')} className="text-red-400 hover:text-red-600"><X className="w-3 h-3"/></button>
+            <button onClick={() => setError('')} className="text-red-400 hover:text-red-600"><X className="w-3 h-3" /></button>
           </div>
         </div>
       )}
