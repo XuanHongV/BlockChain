@@ -12,6 +12,15 @@ export enum ShipmentStatus {
   FOR_SALE = 4
 }
 
+const getContractWithSigner = async () => {
+  if (typeof (window as any).ethereum === 'undefined') throw new Error("MetaMask is not installed!");
+  const provider = new ethers.BrowserProvider((window as any).ethereum);
+  const signer = await provider.getSigner();
+  
+  return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+};
+
+
 export const getBlockchainContract = (providerOrSigner: Provider | Signer) => {
   try {
     return new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, providerOrSigner);
@@ -58,12 +67,9 @@ interface ShipmentData {
 }
 
 export const callCreateShipment = async (data: ShipmentData) => {
-  if (typeof (window as any).ethereum === 'undefined') throw new Error("MetaMask chưa được cài đặt!");
-
   try {
-    const provider = new ethers.BrowserProvider((window as any).ethereum);
-    const signer = await provider.getSigner();
-    const contract = getBlockchainContract(signer);
+    //Contract nhanh
+    const contract = await getContractWithSigner();
 
     const tx = await contract.createShipment(
       data.productName,
@@ -77,29 +83,21 @@ export const callCreateShipment = async (data: ShipmentData) => {
 };
 
 export const callUpdateStatus = async (id: string | number, newStatus: number): Promise<TransactionResponse> => {
-  if (!(window as any).ethereum) throw new Error("Vui lòng cài đặt MetaMask!");
-
   try {
-    let numericId: string;
-    if (typeof id === 'string' && id.startsWith('SHP-')) {
-      numericId = id.replace('SHP-', '');
-    } else {
-      numericId = id.toString();
-    }
+    
+    let numericId = id.toString();
+    if (numericId.startsWith('SHP-')) numericId = numericId.replace('SHP-', '');
 
-    const provider = new ethers.BrowserProvider((window as any).ethereum);
-    const signer = await provider.getSigner();
-    const contract = getBlockchainContract(signer);
-
-    console.log(`Đang gọi updateStatus(id: ${numericId}, status: ${newStatus})`);
-
+    const contract = await getContractWithSigner();
+    
     const tx = await contract.updateStatus(numericId, newStatus);
+    
     return tx;
 
   } catch (error: any) {
     handleBlockchainError(error);
   }
-  throw new Error("Lỗi không xác định");
+  throw new Error("Unknown error");
 };
 
 export interface ChainShipmentData {
