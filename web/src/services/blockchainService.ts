@@ -6,17 +6,17 @@ const AMOY_CHAIN_ID_DECIMAL = 80002n;
 
 const AMOY_CONFIG = {
   chainId: AMOY_CHAIN_ID_HEX,
-  chainName: "Polygon Amoy Testnet",
+  chainName: "Amoy",
   nativeCurrency: {
     name: "MATIC",
     symbol: "POL",
     decimals: 18,
   },
-  rpcUrls: ["https://polygon-amoy.drpc.org"], 
+  rpcUrls: ["https://rpc-amoy.polygon.technology/"], 
   blockExplorerUrls: ["https://amoy.polygonscan.com/"],
 };
 
-const CONTRACT_ADDRESS = "0xaFa858621ACa7caD1BD67dBaBC7655Fa65D68223";
+const CONTRACT_ADDRESS = "0x9468ED35C5A8C2a766A1efE7ebCDB2CACc8C36e8";
 const CONTRACT_ABI = ABI;
 
 export enum ShipmentStatus {
@@ -146,11 +146,11 @@ export const callAddDocumentHash = async (params: AddDocumentParams) => {
     const contract = await getContractWithSigner();
     let numericId = params.shipmentId.toString().replace('SHP-', '');
 
-    console.log(`Adding Document Hash... ID: ${numericId}`);
+    console.log(`Adding Document Hash... ID: ${numericId}, Hash: ${params.fileHash}`);
     const tx = await contract.addDocumentHash(
       numericId,
       params.fileHash,
-      params.docType
+      // params.docType
     );
     return tx; 
   } catch (error: any) {

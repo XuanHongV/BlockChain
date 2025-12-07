@@ -118,17 +118,6 @@ export const ProductTracking: React.FC = () => {
           <p className="text-gray-600">Giám sát chuỗi cung ứng trên Blockchain</p>
         </div>
         <div className="flex gap-2">
-          {/* <button 
-            onClick={syncWithBlockchain}
-            disabled={isSyncing}
-            className={`flex items-center gap-2 px-4 py-2 rounded border font-medium transition-colors ${
-                isSyncing ? 'bg-blue-100 text-blue-600' : 'bg-white hover:bg-blue-50 text-blue-700 border-blue-300 shadow-sm'
-            }`}
-          >
-            <Link2 className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ Blockchain'}
-          </button> */}
-
           <button 
             onClick={fetchShipments}
             className="p-2 bg-white border rounded hover:bg-gray-100 text-gray-600"
@@ -174,7 +163,6 @@ export const ProductTracking: React.FC = () => {
           </div>
         </div>
       </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
         <ShipmentList 
             title={`Danh sách lô hàng (${filteredShipments.length})`}
