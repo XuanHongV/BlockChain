@@ -4,8 +4,11 @@ import cors from 'cors';
 import connectDB from './config/db';
 import userRoutes from './routes/userRoutes';
 import shipmentRoutes from './routes/shipmentRoutes';
+import ipfsRoutes from "./routes/ipfsRoutes";
+
 
 dotenv.config();
+console.log("Pinata JWT Loaded:", process.env.PINATA_JWT ? "YES" : "NO");
 connectDB();
 
 export const app = express();
@@ -29,6 +32,8 @@ app.use('/api/users', userRoutes);
 
 // Shipment routes
 app.use('/api/shipments', shipmentRoutes);
+
+app.use("/api/ipfs", ipfsRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

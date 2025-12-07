@@ -127,7 +127,7 @@ export const getShipmentById = async (req: Request, res: Response) => {
   if (!shipment) {
     // Nếu trình duyệt
     if (req.headers.accept && req.headers.accept.includes('text/html')) {
-      return res.status(404).send(`<h1>❌ Không tìm thấy lô hàng: ${id}</h1>`);
+      return res.status(404).send(`<h1> Không tìm thấy lô hàng: ${id}</h1>`);
     }
 
     // Nếu API
@@ -216,44 +216,46 @@ export const updateShipmentStatus = async (req: Request, res: Response) => {
   }
 };
 
-// Cập nhật trạng thái lô hàng theo _id (PUT)
-// Nếu trạng thái thay đổi và có transactionHash mới -> lưu hash mới
+// Cập nhật lô hàng theo id (có thể là _id hoặc shipmentId)
+// Cho phép cập nhật status, transactionHash, ipfsHash
 export const updateShipmentById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Kiểm tra format _id
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid shipment id format" });
-    }
-
-    // Lấy dữ liệu từ body
+    // Lấy dữ liệu từ body (đều là OPTIONAL)
     const {
       status: newStatus,
       transactionHash,
+      ipfsHash,
     }: {
       status?: IShipment["status"];
       transactionHash?: string;
+      ipfsHash?: string;
     } = req.body;
 
-    // Validate cơ bản
-    if (!newStatus) {
+    // Nếu không có gì để cập nhật thì báo lỗi
+    if (!newStatus && !transactionHash && !ipfsHash) {
       return res.status(400).json({
-        message: "Missing required field: status",
+        message: "No fields to update. You can send status, transactionHash or ipfsHash.",
       });
     }
 
-    // Tìm shipment theo _id
-    const shipment = await Shipment.findById(id).exec();
+    // Cho phép id là _id (ObjectId) hoặc shipmentId
+    const filter = mongoose.Types.ObjectId.isValid(id)
+      ? { _id: id }
+      : { shipmentId: id };
+
+    // Tìm shipment
+    const shipment = await Shipment.findOne(filter).exec();
     if (!shipment) {
       return res.status(404).json({ message: "Shipment not found" });
     }
 
-    // Nếu có transactionHash mới và khác với hash cũ -> check trùng & cập nhật
+    // 1. Xử lý transactionHash (nếu có gửi)
     if (transactionHash && transactionHash.trim() !== shipment.transactionHash) {
       const newTx = transactionHash.trim();
 
-      // Kiểm tra trùng hash với lô hàng khác
+      // Check trùng hash với lô hàng khác
       const existedByTx = await Shipment.findOne({
         transactionHash: newTx,
         _id: { $ne: shipment._id },
@@ -266,8 +268,15 @@ export const updateShipmentById = async (req: Request, res: Response) => {
       shipment.transactionHash = newTx;
     }
 
-    // Cập nhật status (luôn cập nhật vì đây là PUT)
-    shipment.status = newStatus as IShipment["status"];
+    // 2. Xử lý status (nếu có gửi)
+    if (newStatus) {
+      shipment.status = newStatus as IShipment["status"];
+    }
+
+    // 3. Xử lý ipfsHash (HASH IPFS)
+    if (ipfsHash) {
+      shipment.ipfsHash = String(ipfsHash).trim();
+    }
 
     await shipment.save();
 
@@ -279,5 +288,33 @@ export const updateShipmentById = async (req: Request, res: Response) => {
     return res.status(500).json({ message: error.message || "Server error" });
   }
 };
+
+
+// Thống kê đơn giản: tổng số lô, số lô ở trạng thái cuối cùng
+export const getShipmentStats = async (req: Request, res: Response) => {
+  try {
+    // truyền finalStatus qua query, mặc định là "FOR_SALE"
+    const finalStatus =
+      (req.query.finalStatus as IShipment["status"]) || "FOR_SALE";
+
+    // Đếm song song
+    const [total, finalCount] = await Promise.all([
+      Shipment.countDocuments({}),                 // tổng số lô hàng
+      Shipment.countDocuments({ status: finalStatus }), // số lô ở trạng thái cuối
+    ]);
+
+    return res.status(200).json({
+      totalShipments: total,
+      finalStatus,
+      finalShipments: finalCount,
+    });
+  } catch (error: any) {
+    return res
+      .status(500)
+      .json({ message: error.message || "Server error" });
+  }
+};
+
+
 
 

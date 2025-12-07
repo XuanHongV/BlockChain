@@ -20,6 +20,7 @@ export interface IShipment extends Document {
     createdAt: Date; 
     updatedAt: Date; 
     statusHistory?: IStatusHistoryEntry[];
+    ipfsHash?: string;
 }
 
 const statusEnum: ShipmentStatus[] = [
@@ -91,9 +92,13 @@ const ShipmentSchema: Schema = new Schema(
             trim: true,
         },
         statusHistory: {
-        type: [StatusHistorySchema],
-        default: [],
+            type: [StatusHistorySchema],
+            default: [],
         },
+        ipfsHash: {
+            type: String,
+            trim: true,
+    },
     },
     {
         timestamps: true,
